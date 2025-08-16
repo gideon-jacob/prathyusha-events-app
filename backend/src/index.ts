@@ -1,13 +1,13 @@
-import express, { Request, Response } from "express";
+import "./config";
+import express from "express";
 import cors, { CorsOptions } from "cors";
-// import mongoose from 'mongoose';
-import dotenv from "dotenv";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-
-// Load environment variables from example first, then override with actual .env
-dotenv.config({ path: ".env.example" });
-dotenv.config({ path: ".env" });
+import serverlessHttp from "serverless-http";
+import studentRouter from "./routes/student";
+import publisherRouter from "./routes/publisher";
+import authRouter from "./routes/auth";
+import { authenticateToken, authorizeRoles } from "./middleware/auth.middleware";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -70,24 +70,24 @@ if (process.env.NODE_ENV !== "production") {
   };
   app.use(cors(corsOptions));
 }
+
+// Load all the API routes
 app.use(express.json());
-
-// Routes
-app.get("/api/hello", (_req: Request, res: Response) => {
-  res.json({ message: "Hello from the backend server!" });
-});
-
-// Connect to MongoDB
-// const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/eventdb';
-
-// mongoose.connect(MONGODB_URI)
-//   .then(() => console.log('Connected to MongoDB'))
-//   .catch((err: Error) => console.error('MongoDB connection error:', err));
+app.use("/api/student", studentRouter);
+app.use(
+  "/api/publisher",
+  authenticateToken,
+  authorizeRoles(["publisher"]),
+  publisherRouter
+);
+app.use("/api", authRouter);
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  console.log(`API available at http://localhost:${PORT}/api`);
-});
+if (process.env.IS_LAMBDA == "false") {
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+    console.log(`API available at http://localhost:${PORT}/api`);
+  });
+}
 
-export default app;
+export const handler = serverlessHttp(app);
